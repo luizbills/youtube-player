@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minha Playlist Local</title>
+    <style>
+      /* CSS - Design Clean e Leve */
+      :root {
+        --bg-color: #f8f9fa;
+        --card-bg: #ffffff;
+        --primary: #ff0000; /* Vermelho YouTube */
+        --text: #333;
+        --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text);
+        margin: 0;
+        padding: 20px;
+      }
+
+      h1 {
+        text-align: center;
+        font-weight: 300;
+        margin-bottom: 40px;
+      }
+
+      /* Grid de Vídeos */
+      .video-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      /* Card do Vídeo */
+      .card {
+        background: var(--card-bg);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        transition: transform 0.2s;
+        position: relative;
+        cursor: pointer;
+      }
+
+      .card:hover {
+        transform: translateY(-5px);
+      }
+
+      .card img {
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        display: block;
+      }
+
+      .card-body {
+        padding: 15px;
+      }
+      .card-title {
+        margin: 0;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Botão Deletar */
+      .btn-delete {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        cursor: pointer;
+        z-index: 10;
+      }
+      .btn-delete:hover {
+        background: var(--primary);
+      }
+
+      /* Estado Vazio */
+      .empty-state {
+        text-align: center;
+        margin-top: 100px;
+        color: #888;
+        display: none; /* Controlado via JS */
+      }
+
+      /* Botão Flutuante (FAB) */
+      .fab {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 60px;
+        height: 60px;
+        background-color: var(--primary);
+        color: white;
+        border-radius: 50%;
+        border: none;
+        font-size: 30px;
+        box-shadow: 0 4px 12px rgba(255, 0, 0, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s;
+      }
+      .fab:hover {
+        transform: scale(1.1);
+      }
+
+      /* Modal (Popup) */
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal-content {
+        width: 90%;
+        max-width: 800px;
+        aspect-ratio: 16/9;
+        background: black;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .modal-content #playerContainer {
+        height: 100%;
+      }
+
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Minha Playlist</h1>
+
+    <div id="videoContainer" class="video-grid"></div>
+
+    <div id="emptyMessage" class="empty-state">
+      <h2>Sua lista está vazia</h2>
+      <p>Clique no botão + abaixo para adicionar um vídeo.</p>
+    </div>
+
+    <button class="fab" onclick="adicionarVideo()">+</button>
+
+    <div id="videoModal" class="modal" onclick="fecharModal()">
+      <div class="modal-content">
+        <div id="playerContainer"></div>
+      </div>
+    </div>
+
+    <script>
+      // --- JAVASCRIPT ---
+
+      const STORAGE_KEY = "minha_playlist_local";
+      let videos = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+      // Inicialização
+      document.addEventListener("DOMContentLoaded", renderizar);
+
+      function renderizar() {
+        const container = document.getElementById("videoContainer");
+        const emptyMsg = document.getElementById("emptyMessage");
+
+        container.innerHTML = "";
+
+        if (videos.length === 0) {
+          emptyMsg.style.display = "block";
+        } else {
+          emptyMsg.style.display = "none";
+          videos.forEach((video, index) => {
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `
+                        <button class="btn-delete" onclick="deletarVideo(event, ${index})">&times;</button>
+                        <img src="https://img.youtube.com/vi/${video.id}/hqdefault.jpg" alt="Thumbnail">
+                    `;
+            // Clique no card abre o vídeo (exceto se clicar no delete)
+            card.addEventListener("click", (e) => {
+              if (e.target.className !== "btn-delete") abrirModal(video.id);
+            });
+            container.appendChild(card);
+          });
+        }
+      }
+
+      function adicionarVideo() {
+        const url = prompt("Cole a URL do YouTube aqui:");
+        if (!url) return;
+
+        const id = extrairID(url);
+        if (id) {
+          videos.push({ id: id });
+          salvar();
+          renderizar();
+        } else {
+          alert("URL inválida!");
+        }
+      }
+
+      function deletarVideo(event, index) {
+        event.stopPropagation(); // Impede abrir o modal
+        if (confirm("Remover este vídeo?")) {
+          videos.splice(index, 1);
+          salvar();
+          renderizar();
+        }
+      }
+
+      function salvar() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(videos));
+      }
+
+      function extrairID(url) {
+        const regExp =
+          /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        return match && match[2].length === 11 ? match[2] : null;
+      }
+
+      // Modal Logic
+      const modal = document.getElementById("videoModal");
+      const playerContainer = document.getElementById("playerContainer");
+
+      function abrirModal(id) {
+        playerContainer.innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${id}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen;" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen="allowfullscreen"></iframe>`;
+
+        modal.style.display = "flex";
+      }
+
+      function fecharModal() {
+        modal.style.display = "none";
+        playerContainer.innerHTML = ""; // Para o vídeo
+      }
+    </script>
+  </body>
+</html>
